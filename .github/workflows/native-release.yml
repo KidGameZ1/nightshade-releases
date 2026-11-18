@@ -40,6 +40,14 @@ jobs:
       - name: Install Linux graphics dependencies
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y xvfb libgl1-mesa-dri libglx-mesa0 mesa-utils libxi6 libxrandr2 libxinerama1 libxcursor1 libasound2t64
+      - name: Install Windows software OpenGL for native verification
+        if: runner.os == 'Windows' && inputs.phase == 'verify'
+        # v3, pinned. Newer 26.2.7 MSVC builds currently document a software-GL regression.
+        uses: ssciwr/setup-mesa-dist-win@2dfeaebfa514f74c2b8cd8d27108c31486d33e72
+        with:
+          version: '26.0.3'
+          build-type: release-msvc
+          deployment-choice: '1'
       - name: Build and verify native package
         if: runner.os == 'Linux'
         env:
@@ -50,6 +58,10 @@ jobs:
         if: runner.os == 'Windows'
         env:
           GH_TOKEN: ${{ github.token }}
+          GALLIUM_DRIVER: llvmpipe
+          LIBGL_ALWAYS_SOFTWARE: 'true'
+          WGL_DISABLE_ERROR_DIALOGS: '1'
+          WGL_SWAP_INTERVAL: '0'
         run: python scripts/native-release.py '${{ inputs.phase }}' '${{ inputs.version }}' '${{ matrix.platform }}' '${{ inputs.input_sha256 }}'
       - name: Upload packages and verification evidence
         if: always()
