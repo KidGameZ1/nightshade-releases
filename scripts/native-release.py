@@ -91,6 +91,10 @@ else:
         if 'framework' in jar.name and 'sources' in jar.name: raise RuntimeError('Framework sources were distributed')
     run([editor_java, '-cp', str(editor_cp), 'com.nightshade.tooling.TutorialVerification', evidence/'tutorials'],
         'tutorials', timeout=1800)
+    for language in ('shade','flow','java','nsplugins'):
+        log = (evidence/'tutorials'/language/'native.log').read_text(errors='replace')
+        if 'NIGHTSHADE_SMOKE_OK' not in log or 'llvmpipe' not in log.lower():
+            raise RuntimeError('Actual software OpenGL rendering was not verified: '+language)
     scratch = root/'native-update'; home = scratch/'home'; home.mkdir(parents=True, exist_ok=True)
     env = os.environ.copy()
     for key in ('JAVA_HOME','JDK_HOME','JDK_JAVA_OPTIONS','_JAVA_OPTIONS'): env.pop(key, None)
