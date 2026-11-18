@@ -15,7 +15,7 @@ on:
         description: SHA-256 of the compiled packaging inputs (package phase)
         required: false
 permissions:
-  contents: read
+  contents: write # GitHub requires push access to read unpublished draft assets.
 jobs:
   native:
     name: ${{ inputs.phase }} ${{ matrix.platform }}
@@ -38,7 +38,7 @@ jobs:
           distribution: temurin
           java-version: '21'
       - name: Install Linux graphics dependencies
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && inputs.phase == 'verify'
         run: sudo apt-get update && sudo apt-get install -y xvfb libgl1-mesa-dri libglx-mesa0 mesa-utils libxi6 libxrandr2 libxinerama1 libxcursor1 libasound2t64
       - name: Install Windows software OpenGL for native verification
         if: runner.os == 'Windows' && inputs.phase == 'verify'
@@ -53,7 +53,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           LIBGL_ALWAYS_SOFTWARE: '1'
-        run: xvfb-run -a -s '-screen 0 1440x900x24' python3 scripts/native-release.py '${{ inputs.phase }}' '${{ inputs.version }}' '${{ matrix.platform }}' '${{ inputs.input_sha256 }}'
+        run: |
+          if [ '${{ inputs.phase }}' = verify ]; then
+            xvfb-run -a -s '-screen 0 1440x900x24' python3 scripts/native-release.py '${{ inputs.phase }}' '${{ inputs.version }}' '${{ matrix.platform }}' '${{ inputs.input_sha256 }}'
+          else
+            python3 scripts/native-release.py '${{ inputs.phase }}' '${{ inputs.version }}' '${{ matrix.platform }}' '${{ inputs.input_sha256 }}'
+          fi
       - name: Build and verify native package
         if: runner.os == 'Windows'
         env:
