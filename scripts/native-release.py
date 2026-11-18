@@ -68,7 +68,10 @@ if phase == 'package':
         bundle.extractall(inputs)
     run([java, '-cp', str(inputs/'editor/lib/*'), 'com.nightshade.tooling.BinaryReleaseInputs',
          'package', inputs, output/'installers'], 'native-package')
-    validate_archives(output/'installers'/target.split('-')[0])
+    platform_files = output/'installers'/target.split('-')[0]
+    validate_archives(platform_files)
+    run(['gh','release','upload','v'+version,'--repo',REPOSITORY,'--clobber',
+         *sorted(platform_files.iterdir())], 'upload-draft-packages', timeout=2700)
     (evidence/'package.json').write_text(json.dumps({'version':version,'platform':target,
         'inputSha256':input_sha,'passed':True,'runner':platform.platform()}, indent=2))
 else:
