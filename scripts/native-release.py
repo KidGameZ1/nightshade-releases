@@ -207,6 +207,15 @@ else:
         log = (evidence/'tutorials'/language/'native.log').read_text(errors='replace')
         if 'NIGHTSHADE_SMOKE_OK' not in log or (not target.startswith('macos') and 'llvmpipe' not in log.lower()):
             raise RuntimeError('Actual expected OpenGL rendering was not verified: '+language)
+    run([editor_java, '-cp', str(editor_cp), 'com.nightshade.tooling.CinematicsVerification',
+         hub_cp.parent/'plugins', evidence/'cinematics'], 'cinematics', timeout=180)
+    cinematics_receipt = json.loads((evidence/'cinematics/cinematics-verification.json').read_text())
+    if (cinematics_receipt.get('passed') is not True or cinematics_receipt.get('version') != version
+            or cinematics_receipt.get('platform') != target or cinematics_receipt.get('sdkVersion') != 2
+            or not set(cinematics_receipt.get('checks', [])) >= {'native-ffmpeg-decode','rgba-pixels','stereo-pcm','forward-seek','backward-seek','audio-reset','decoder-close'}):
+        raise RuntimeError('Shipped native Cinematics decoder did not pass on this platform')
+    # Its JVM has exited; Windows native DLL mappings no longer hold this owned cache open.
+    shutil.rmtree(evidence/'cinematics/scratch')
     run([editor_java, '-cp', str(editor_cp), 'com.nightshade.editor.debug.DebuggerVerification', evidence/'debugger'],
         'debugger', timeout=360)
     debugger_receipt = json.loads((evidence/'debugger'/'debugger-verification.json').read_text())
@@ -243,6 +252,6 @@ else:
                 destination.parent.mkdir(parents=True, exist_ok=True); shutil.copy2(file, destination)
     receipt = {'formatVersion':1, 'version':version, 'platform':target, 'passed':True,
         'runner':platform.platform(), 'manifestSha256':digest(manifest),
-        'checks':['tutorial-gameplay','relocated-tutorial-exports','packaged-hub-editor','signed-hub-update','managed-editor-installation','native-debugger','native-workspace','previous-hub-upgrade','project-upgrade-recovery','game-export-icons']}
+        'checks':['tutorial-gameplay','relocated-tutorial-exports','packaged-hub-editor','signed-hub-update','managed-editor-installation','native-debugger','native-workspace','previous-hub-upgrade','project-upgrade-recovery','game-export-icons','cinematics-native']}
     (evidence/(base+'-verification.json')).write_text(json.dumps(receipt, indent=2)+'\n')
     print('PASS native release verification: '+target, flush=True)
