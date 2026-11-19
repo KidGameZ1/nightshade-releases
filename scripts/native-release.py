@@ -11,8 +11,11 @@ if phase not in ('package', 'verify') or target not in ('windows-x64', 'linux-x6
 if not all(part.isdigit() for part in version.split('.')) or len(version.split('.')) != 3:
     raise SystemExit('Invalid release version')
 host = 'windows' if os.name == 'nt' else 'macos' if sys.platform == 'darwin' else 'linux'
-architecture = 'arm64' if platform.machine().lower() in ('aarch64', 'arm64') else 'x64'
-if target != host+'-'+architecture:
+architecture = {'aarch64':'arm64', 'arm64':'arm64', 'amd64':'x64', 'x86_64':'x64'}.get(platform.machine().lower(), 'unsupported')
+archive_only_verification = phase == 'verify' and host == 'macos' and target == 'macos-arm64'
+# The macOS verify branch inspects archives/signatures and exits before any app/JVM launch.
+# Packaging and every native execution path still require the exact target architecture.
+if target != host+'-'+architecture and not (archive_only_verification and architecture == 'x64'):
     raise SystemExit('This runner does not match the requested native platform')
 root = Path.cwd().resolve()
 output = root/'output'; evidence = output/'evidence'; downloads = root/'downloads'
@@ -228,7 +231,7 @@ else:
     editor_java, editor_cp = app_paths('Editor'); hub_java, hub_cp = app_paths('Hub')
     if target.startswith('macos'):
         for name in ('Hub', 'Editor'):
-            run(['/usr/bin/codesign', '--verify', '--deep', '--strict', '--verbose=2',
+            run(['/usr/bin/codesign', '--verify', '--all-architectures', '--deep', '--strict', '--verbose=2',
                  suite/('Nightshade '+name+'.app')], 'verify-signature-'+name.lower())
     for jar in suite.rglob('*.jar'):
         if 'framework' in jar.name and 'sources' in jar.name: raise RuntimeError('Framework sources were distributed')
@@ -236,7 +239,9 @@ else:
         (evidence/(base+'-archive-verification.json')).write_text(json.dumps({
             'version':version,'platform':target,'passed':True,'manifestSha256':digest(manifest),
             'checks':['archive-integrity','app-signatures'],
-            'nativeVerificationRequired':'Run the exact official app components on a physical Mac; this cloud runner lacks OpenGL.'}, indent=2)+'\n')
+            'verificationMode':'archive-only','runnerHost':host,'runnerArchitecture':architecture,
+            'runner':platform.platform(),
+            'nativeVerificationRequired':'Run the exact official ARM64 app components on a physical ARM64 Mac; all eleven native checks remain mandatory.'}, indent=2)+'\n')
         print('PASS macOS archive/signature checks; physical-Mac native receipt is still required.', flush=True)
         sys.exit(0)
     run([editor_java, '-cp', str(editor_cp), 'com.nightshade.tooling.TutorialVerification', evidence/'tutorials'],

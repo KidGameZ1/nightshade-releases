@@ -20,7 +20,9 @@ permissions:
 jobs:
   native:
     name: ${{ inputs.phase }} ${{ matrix.platform }}
-    runs-on: ${{ matrix.runner }}
+    # ARM64 applications are packaged on ARM64. Mac verify only inspects archives/signatures;
+    # the separate physical ARM64 receipt is mandatory for every native execution check.
+    runs-on: ${{ inputs.phase == 'verify' && matrix.platform == 'macos-arm64' && 'macos-15-intel' || matrix.runner }}
     timeout-minutes: 60
     strategy:
       fail-fast: false
