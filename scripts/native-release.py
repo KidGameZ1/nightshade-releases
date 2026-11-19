@@ -214,19 +214,31 @@ else:
     if workspace_receipt.get('passed') is not True or workspace_receipt.get('version') != version or workspace_receipt.get('platform') != target:
         raise RuntimeError('Packaged native workspace verification did not match this release')
     scratch = root/'native-update'; home = scratch/'home'; home.mkdir(parents=True, exist_ok=True)
+    previous = downloads/'previous'; previous.mkdir(exist_ok=True)
+    run(['gh', 'release', 'download', 'v0.3.0', '--repo', REPOSITORY, '--dir', previous,
+         '--pattern', 'catalog.json', '--pattern', 'catalog.sig',
+         '--pattern', 'Nightshade-Hub-0.3.0-'+target+'-update.zip', '--clobber'], 'download-previous-hub')
     env = os.environ.copy()
     for key in ('JAVA_HOME','JDK_HOME','JDK_JAVA_OPTIONS','_JAVA_OPTIONS'): env.pop(key, None)
     env['JAVA_TOOL_OPTIONS'] = '-Duser.home='+home.as_posix()
     try:
         run([hub_java, '-cp', str(hub_cp), 'com.nightshade.hub.update.HubUpdateVerification', suite,
-             downloads/'catalog.json', downloads/'catalog.sig', downloads, scratch], 'native-update', env=env, cwd=scratch, timeout=360)
+             downloads/'catalog.json', downloads/'catalog.sig', downloads, scratch,
+             previous/'catalog.json', previous/'catalog.sig', previous], 'native-update', env=env, cwd=scratch, timeout=360)
+        update_receipt = json.loads((scratch/'verification.json').read_text())
+        if (update_receipt.get('passed') is not True or update_receipt.get('version') != version
+                or update_receipt.get('previousHubVersion') != '0.3.0'
+                or update_receipt.get('previousHubUpgrade') is not True
+                or update_receipt.get('projectUpgradeRecovery') is not True
+                or update_receipt.get('editorRemainedRunning') is not True):
+            raise RuntimeError('Native update did not verify the previous public Hub and project recovery')
     finally:
         for file in scratch.rglob('*'):
-            if file.is_file() and (file.suffix == '.log' or file.name in ('journal.json','job.json','verification.txt')):
+            if file.is_file() and (file.suffix == '.log' or file.name in ('journal.json','job.json','verification.txt','verification.json') or file.is_relative_to(scratch/'project-upgrade')):
                 destination = evidence/'native-update'/file.relative_to(scratch)
                 destination.parent.mkdir(parents=True, exist_ok=True); shutil.copy2(file, destination)
     receipt = {'formatVersion':1, 'version':version, 'platform':target, 'passed':True,
         'runner':platform.platform(), 'manifestSha256':digest(manifest),
-        'checks':['tutorial-gameplay','relocated-tutorial-exports','packaged-hub-editor','signed-hub-update','managed-editor-installation','native-debugger','native-workspace']}
+        'checks':['tutorial-gameplay','relocated-tutorial-exports','packaged-hub-editor','signed-hub-update','managed-editor-installation','native-debugger','native-workspace','previous-hub-upgrade','project-upgrade-recovery']}
     (evidence/(base+'-verification.json')).write_text(json.dumps(receipt, indent=2)+'\n')
     print('PASS native release verification: '+target, flush=True)
