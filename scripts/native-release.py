@@ -270,9 +270,17 @@ else:
         raise RuntimeError('Packaged native workspace verification did not match this release')
     scratch = root/'native-update'; home = scratch/'home'; home.mkdir(parents=True, exist_ok=True)
     previous = downloads/'previous'; previous.mkdir(exist_ok=True)
-    run(['gh', 'release', 'download', 'v0.3.0', '--repo', REPOSITORY, '--dir', previous,
+    previous_release = json.loads(subprocess.check_output(['gh', 'api', 'repos/'+REPOSITORY+'/releases/latest'], text=True))
+    previous_tag = previous_release.get('tag_name', '')
+    if not re.fullmatch(r'v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)', previous_tag):
+        raise RuntimeError('The previous stable release has an invalid version')
+    previous_version = previous_tag[1:]
+    if (previous_release.get('draft') or previous_release.get('prerelease')
+            or tuple(map(int, previous_version.split('.'))) >= tuple(map(int, version.split('.')))):
+        raise RuntimeError('Update verification requires an earlier public stable release')
+    run(['gh', 'release', 'download', previous_tag, '--repo', REPOSITORY, '--dir', previous,
          '--pattern', 'catalog.json', '--pattern', 'catalog.sig',
-         '--pattern', 'Nightshade-Hub-0.3.0-'+target+'-update.zip', '--clobber'], 'download-previous-hub')
+         '--pattern', 'Nightshade-Hub-'+previous_version+'-'+target+'-update.zip', '--clobber'], 'download-previous-hub')
     env = os.environ.copy()
     for key in ('JAVA_HOME','JDK_HOME','JDK_JAVA_OPTIONS','_JAVA_OPTIONS'): env.pop(key, None)
     env['JAVA_TOOL_OPTIONS'] = '-Duser.home='+home.as_posix()
@@ -283,7 +291,7 @@ else:
              previous/'catalog.json', previous/'catalog.sig', previous], 'native-update', env=env, cwd=scratch, timeout=360)
         update_receipt = json.loads((scratch/'verification.json').read_text())
         if (update_receipt.get('passed') is not True or update_receipt.get('version') != version
-                or update_receipt.get('previousHubVersion') != '0.3.0'
+                or update_receipt.get('previousHubVersion') != previous_version
                 or update_receipt.get('previousHubUpgrade') is not True
                 or update_receipt.get('projectUpgradeRecovery') is not True
                 or update_receipt.get('editorRemainedRunning') is not True):
