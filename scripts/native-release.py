@@ -203,6 +203,16 @@ else:
         log = (evidence/'tutorials'/language/'native.log').read_text(errors='replace')
         if 'NIGHTSHADE_SMOKE_OK' not in log or (not target.startswith('macos') and 'llvmpipe' not in log.lower()):
             raise RuntimeError('Actual expected OpenGL rendering was not verified: '+language)
+    run([editor_java, '-cp', str(editor_cp), 'com.nightshade.editor.debug.DebuggerVerification', evidence/'debugger'],
+        'debugger', timeout=360)
+    debugger_receipt = json.loads((evidence/'debugger'/'debugger-verification.json').read_text())
+    if debugger_receipt.get('passed') is not True or debugger_receipt.get('version') != version or debugger_receipt.get('platform') != target:
+        raise RuntimeError('Packaged native debugger verification did not match this release')
+    run([editor_java, '-cp', str(editor_cp), 'com.nightshade.editor.EditorUiVerification', evidence/'workspace'],
+        'workspace', timeout=360)
+    workspace_receipt = json.loads((evidence/'workspace'/'workspace-verification.json').read_text())
+    if workspace_receipt.get('passed') is not True or workspace_receipt.get('version') != version or workspace_receipt.get('platform') != target:
+        raise RuntimeError('Packaged native workspace verification did not match this release')
     scratch = root/'native-update'; home = scratch/'home'; home.mkdir(parents=True, exist_ok=True)
     env = os.environ.copy()
     for key in ('JAVA_HOME','JDK_HOME','JDK_JAVA_OPTIONS','_JAVA_OPTIONS'): env.pop(key, None)
@@ -217,6 +227,6 @@ else:
                 destination.parent.mkdir(parents=True, exist_ok=True); shutil.copy2(file, destination)
     receipt = {'formatVersion':1, 'version':version, 'platform':target, 'passed':True,
         'runner':platform.platform(), 'manifestSha256':digest(manifest),
-        'checks':['tutorial-gameplay','relocated-tutorial-exports','packaged-hub-editor','signed-hub-update','managed-editor-installation']}
+        'checks':['tutorial-gameplay','relocated-tutorial-exports','packaged-hub-editor','signed-hub-update','managed-editor-installation','native-debugger','native-workspace']}
     (evidence/(base+'-verification.json')).write_text(json.dumps(receipt, indent=2)+'\n')
     print('PASS native release verification: '+target, flush=True)
