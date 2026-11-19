@@ -199,6 +199,10 @@ else:
         sys.exit(0)
     run([editor_java, '-cp', str(editor_cp), 'com.nightshade.tooling.TutorialVerification', evidence/'tutorials'],
         'tutorials', timeout=1800)
+    tutorial_receipts = json.loads((evidence/'tutorials/verification.json').read_text())
+    if len(tutorial_receipts) != 4 or not all(item.get('gameIcon', {}).get('nativeLauncherIconVerified') is True
+            and item['gameIcon'].get('relocated') is True and item['gameIcon'].get('sha256') for item in tutorial_receipts):
+        raise RuntimeError('All four native exports must verify selected/default icons after relocation')
     for language in ('shade','flow','java','nsplugins'):
         log = (evidence/'tutorials'/language/'native.log').read_text(errors='replace')
         if 'NIGHTSHADE_SMOKE_OK' not in log or (not target.startswith('macos') and 'llvmpipe' not in log.lower()):
@@ -239,6 +243,6 @@ else:
                 destination.parent.mkdir(parents=True, exist_ok=True); shutil.copy2(file, destination)
     receipt = {'formatVersion':1, 'version':version, 'platform':target, 'passed':True,
         'runner':platform.platform(), 'manifestSha256':digest(manifest),
-        'checks':['tutorial-gameplay','relocated-tutorial-exports','packaged-hub-editor','signed-hub-update','managed-editor-installation','native-debugger','native-workspace','previous-hub-upgrade','project-upgrade-recovery']}
+        'checks':['tutorial-gameplay','relocated-tutorial-exports','packaged-hub-editor','signed-hub-update','managed-editor-installation','native-debugger','native-workspace','previous-hub-upgrade','project-upgrade-recovery','game-export-icons']}
     (evidence/(base+'-verification.json')).write_text(json.dumps(receipt, indent=2)+'\n')
     print('PASS native release verification: '+target, flush=True)
