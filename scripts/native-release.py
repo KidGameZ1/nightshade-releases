@@ -30,6 +30,48 @@ def run(command, name, env=None, cwd=None, timeout=1800):
     print((evidence/(name+'.log')).read_text(errors='replace')[-6000:], flush=True)
     completed.check_returncode()
 
+def preserve_update_diagnostics(scratch, failed):
+    """Keep launch evidence outside hidden .nightshade paths excluded by artifact upload."""
+    project = scratch/'Verification Game'
+    destination = evidence/'native-update'/'diagnostics'
+    destination.mkdir(parents=True, exist_ok=True)
+    paths = [project/'project.nshade', project/'.nightshade/editor.log', project/'.nightshade/editor-upgrades.json']
+    paths.extend(sorted((project/'.nightshade/launch').glob('*.json')))
+    paths.extend(sorted((project/'.nightshade/recovery/editor-upgrades').glob('*/manifest.json')))
+    budget = 2*1024*1024
+    for path in paths:
+        if not path.is_file():
+            continue
+        # Only these controlled QA logs/receipts are exposed. Never record the environment.
+        limit = min(256*1024, budget)
+        if limit <= 0:
+            break
+        with path.open('rb') as stream:
+            size = path.stat().st_size
+            if size > limit:
+                stream.seek(size-limit)
+            data = stream.read(limit)
+        budget -= len(data)
+        name = path.relative_to(project).as_posix().replace('/', '__').lstrip('.')
+        (destination/name).write_bytes(data)
+        if failed:
+            print('UPDATE_DIAGNOSTIC '+name+' (last bounded bytes)', flush=True)
+            print(data.decode('utf-8', errors='replace')[-16000:], flush=True)
+    if os.name == 'nt':
+        query = ("Get-CimInstance Win32_Process | Where-Object { $_.Name -like '*Nightshade*' "
+                 "-or $_.Name -eq 'java.exe' -or $_.Name -eq 'javaw.exe' } | "
+                 "Select-Object ProcessId,ParentProcessId,Name | ConvertTo-Json -Depth 2")
+        try:
+            result = subprocess.run(['powershell.exe','-NoProfile','-NonInteractive','-Command',query],
+                capture_output=True, text=True, timeout=20)
+            data = result.stdout[:64000]
+            (destination/'windows-process-ids.json').write_text(data, encoding='utf-8')
+            if failed:
+                print('UPDATE_DIAGNOSTIC Windows process IDs and parents (no arguments/environment)', flush=True)
+                print(data, flush=True)
+        except (OSError, subprocess.TimeoutExpired) as error:
+            (destination/'process-snapshot-unavailable.txt').write_text(type(error).__name__+'\n')
+
 def fetch(pattern):
     run(['gh', 'release', 'download', 'v'+version, '--repo', REPOSITORY, '--pattern', pattern,
          '--dir', downloads, '--clobber'], 'download-'+pattern.replace('*','all').replace('/','_'))
@@ -234,6 +276,7 @@ else:
     env = os.environ.copy()
     for key in ('JAVA_HOME','JDK_HOME','JDK_JAVA_OPTIONS','_JAVA_OPTIONS'): env.pop(key, None)
     env['JAVA_TOOL_OPTIONS'] = '-Duser.home='+home.as_posix()
+    update_passed = False
     try:
         run([hub_java, '-cp', str(hub_cp), 'com.nightshade.hub.update.HubUpdateVerification', suite,
              downloads/'catalog.json', downloads/'catalog.sig', downloads, scratch,
@@ -245,7 +288,9 @@ else:
                 or update_receipt.get('projectUpgradeRecovery') is not True
                 or update_receipt.get('editorRemainedRunning') is not True):
             raise RuntimeError('Native update did not verify the previous public Hub and project recovery')
+        update_passed = True
     finally:
+        preserve_update_diagnostics(scratch, not update_passed)
         for file in scratch.rglob('*'):
             if file.is_file() and (file.suffix == '.log' or file.name in ('journal.json','job.json','verification.txt','verification.json') or file.is_relative_to(scratch/'project-upgrade')):
                 destination = evidence/'native-update'/file.relative_to(scratch)
