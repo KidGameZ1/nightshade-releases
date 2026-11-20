@@ -260,6 +260,13 @@ else:
     if (native_editor.get('passed') is not True or native_editor.get('version') != version
             or native_editor.get('platform') != target):
         raise RuntimeError('Packaged native Shade editor workflow did not pass on this platform')
+    native_editor_work = Path(native_editor['workspace']).resolve()
+    if (native_editor_work.parent != (evidence/'native-editor').resolve()
+            or not native_editor_work.name.startswith('native-editor-workspace-')):
+        raise RuntimeError('Native Editor verification workspace is outside its owned evidence directory')
+    shutil.rmtree(native_editor_work/'Relocated Exports With Spaces')
+    native_editor['exportRetained'] = False
+    (evidence/'native-editor/native-editor-verification.json').write_text(json.dumps(native_editor,indent=2)+'\n')
     tutorial_receipts = json.loads((evidence/'tutorials/verification.json').read_text())
     if len(tutorial_receipts) != 4 or not all(item.get('gameIcon', {}).get('nativeLauncherIconVerified') is True
             and item['gameIcon'].get('relocated') is True and item['gameIcon'].get('sha256') for item in tutorial_receipts):

@@ -96,9 +96,12 @@ def verify(binaries, output, version, target, graphical=True):
         checks.append('native-shade-graphics')
     def digest(path):
         return hashlib.sha256(path.read_bytes()).hexdigest()
-    receipt = {'formatVersion':1,'version':version,'platform':target,'passed':True,'javaRequired':False,
+    receipt = {'formatVersion':1,'version':version,'platform':target,'passed':True,'javaRequired':False,'exportExecutableRetained':False,
                'checks':checks,'binaries':{p.name:digest(p) for p in (cli,player)}}
     (output/'native-shade-verification.json').write_text(json.dumps(receipt,indent=2)+'\n')
+    # Reports, compiled payload and screenshot remain; the copied executable is
+    # redundant with the shipped binary whose exact hash is in this receipt.
+    moved_player.unlink()
     return receipt
 
 
