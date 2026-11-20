@@ -23,16 +23,8 @@ def verify(binaries, output, version, target, graphical=True):
         if not binary.is_file():
             raise RuntimeError('Missing shipped native binary: '+str(binary))
     env = os.environ.copy()
-    # The Windows CI runner installs Mesa through the pinned workflow action.
-    # Place its DLLs next to this QA-only relocated executable so removing PATH
-    # cannot accidentally switch the test to Windows' legacy OpenGL 1.1 driver.
-    software_gl = None
-    if host == 'windows':
-        for directory in os.environ.get('PATH', '').split(os.pathsep):
-            candidate=Path(directory)
-            if directory and (candidate/'opengl32.dll').is_file():
-                software_gl=candidate
-                break
+    # Windows CI installs its pinned Mesa driver system-wide. Clearing PATH
+    # leaves the Windows system DLL search intact without copying OS libraries.
     for key in ('JAVA_HOME', 'JDK_HOME', 'JAVA_TOOL_OPTIONS', 'JDK_JAVA_OPTIONS', '_JAVA_OPTIONS', 'PYTHONPATH'):
         env.pop(key, None)
     # Absolute native executable paths work with no Java/Python command discoverable.
@@ -81,9 +73,6 @@ def verify(binaries, output, version, target, graphical=True):
     shutil.move(str(project), relocated/'project')
     moved_player = relocated/('Native Game'+suffix)
     shutil.copy2(player, moved_player)
-    if software_gl:
-        for dll in software_gl.glob('*.dll'):
-            shutil.copy2(dll, relocated/dll.name)
     if host != 'windows':
         moved_player.chmod(moved_player.stat().st_mode | 0o111)
     report = output/'native-state.json'
@@ -106,7 +95,7 @@ def verify(binaries, output, version, target, graphical=True):
     def digest(path):
         return hashlib.sha256(path.read_bytes()).hexdigest()
     receipt = {'formatVersion':1,'version':version,'platform':target,'passed':True,'javaRequired':False,
-               'checks':checks,'softwareOpenGL':software_gl is not None,'binaries':{p.name:digest(p) for p in (cli,player)}}
+               'checks':checks,'binaries':{p.name:digest(p) for p in (cli,player)}}
     (output/'native-shade-verification.json').write_text(json.dumps(receipt,indent=2)+'\n')
     return receipt
 
