@@ -76,7 +76,9 @@ def verify(binaries, output, version, target, graphical=True):
     if host != 'windows':
         moved_player.chmod(moved_player.stat().st_mode | 0o111)
     report = output/'native-state.json'
-    run([moved_player, '--headless', '--frames', 60, '--dt', 1/60, '--report', report], 'player-headless')
+    headless_log=run([moved_player, '--headless', '--frames', 60, '--dt', 1/60, '--report', report], 'player-headless')
+    if 'PASS: 60 native frames' not in headless_log:
+        raise RuntimeError('Native player did not preserve redirected headless output')
 
     def check_state(path):
         state = json.loads(path.read_text())
