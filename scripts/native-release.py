@@ -241,11 +241,25 @@ else:
             'checks':['archive-integrity','app-signatures'],
             'verificationMode':'archive-only','runnerHost':host,'runnerArchitecture':architecture,
             'runner':platform.platform(),
-            'nativeVerificationRequired':'Run the exact official ARM64 app components on a physical ARM64 Mac; all eleven native checks remain mandatory.'}, indent=2)+'\n')
+            'nativeVerificationRequired':'Run the exact official ARM64 app components on a physical ARM64 Mac; all fifteen native checks remain mandatory.'}, indent=2)+'\n')
         print('PASS macOS archive/signature checks; physical-Mac native receipt is still required.', flush=True)
         sys.exit(0)
     run([editor_java, '-cp', str(editor_cp), 'com.nightshade.tooling.TutorialVerification', evidence/'tutorials'],
         'tutorials', timeout=1800)
+    run([sys.executable, Path(__file__).with_name('verify-native-shade.py'),
+         '--binaries', editor_cp.parent/'shade-native'/target, '--output', evidence/'native-shade',
+         '--version', version, '--platform', target], 'native-shade', timeout=360)
+    native_shade = json.loads((evidence/'native-shade/native-shade-verification.json').read_text())
+    if (native_shade.get('passed') is not True or native_shade.get('version') != version
+            or native_shade.get('platform') != target or native_shade.get('javaRequired') is not False
+            or not set(native_shade.get('checks', [])) >= {'native-shade-cli','native-shade-relocated-runtime','native-shade-graphics'}):
+        raise RuntimeError('Shipped JVM-free Shade tools did not pass native verification')
+    run([editor_java, '-cp', str(editor_cp), 'com.nightshade.editor.NativeEditorVerification',
+         evidence/'native-editor'], 'native-editor-workflow', timeout=360)
+    native_editor = json.loads((evidence/'native-editor/native-editor-verification.json').read_text())
+    if (native_editor.get('passed') is not True or native_editor.get('version') != version
+            or native_editor.get('platform') != target):
+        raise RuntimeError('Packaged native Shade editor workflow did not pass on this platform')
     tutorial_receipts = json.loads((evidence/'tutorials/verification.json').read_text())
     if len(tutorial_receipts) != 4 or not all(item.get('gameIcon', {}).get('nativeLauncherIconVerified') is True
             and item['gameIcon'].get('relocated') is True and item['gameIcon'].get('sha256') for item in tutorial_receipts):
@@ -310,6 +324,6 @@ else:
                 destination.parent.mkdir(parents=True, exist_ok=True); shutil.copy2(file, destination)
     receipt = {'formatVersion':1, 'version':version, 'platform':target, 'passed':True,
         'runner':platform.platform(), 'manifestSha256':digest(manifest),
-        'checks':['tutorial-gameplay','relocated-tutorial-exports','packaged-hub-editor','signed-hub-update','managed-editor-installation','native-debugger','native-workspace','previous-hub-upgrade','project-upgrade-recovery','game-export-icons','cinematics-native']}
+        'checks':['tutorial-gameplay','relocated-tutorial-exports','packaged-hub-editor','signed-hub-update','managed-editor-installation','native-debugger','native-workspace','previous-hub-upgrade','project-upgrade-recovery','game-export-icons','cinematics-native','native-shade-cli','native-shade-relocated-runtime','native-shade-graphics','native-editor-workflow']}
     (evidence/(base+'-verification.json')).write_text(json.dumps(receipt, indent=2)+'\n')
     print('PASS native release verification: '+target, flush=True)
