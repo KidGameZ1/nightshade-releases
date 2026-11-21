@@ -70,8 +70,10 @@ def windows_compilers():
     installation=subprocess.check_output([str(vswhere),"-latest","-products","*","-requires","Microsoft.VisualStudio.Component.VC.Tools.x86.x64","-property","installationPath"],text=True).strip()
     script=Path(installation)/"Common7/Tools/VsDevCmd.bat"
     schema.require(script.is_file(),"Windows C++ verification requires the Visual Studio x64 SDK")
-    command='"'+str(script)+'" -no_logo -arch=x64 -host_arch=x64 >nul && set'
-    result=subprocess.run([os.environ.get("COMSPEC","cmd.exe"),"/d","/s","/c",command],check=True,text=True,capture_output=True)
+    with tempfile.TemporaryDirectory(prefix="nightshade-msvc-") as temporary:
+        wrapper=Path(temporary)/"configure.cmd"
+        wrapper.write_text('@call "'+str(script)+'" -no_logo -arch=x64 -host_arch=x64 >nul\n@if errorlevel 1 exit /b 1\n@set\n')
+        result=subprocess.run([os.environ.get("COMSPEC","cmd.exe"),"/d","/c","configure.cmd"],cwd=temporary,check=True,text=True,capture_output=True)
     for line in result.stdout.splitlines():
         if "=" in line and not line.startswith("="):
             key,value=line.split("=",1);os.environ[key]=value

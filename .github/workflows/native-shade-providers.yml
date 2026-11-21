@@ -12,7 +12,7 @@ on:
         description: SHA-256 of the public-only input archive
         required: true
 permissions:
-  contents: read
+  contents: write # GitHub hides unpublished draft assets from read-only job tokens. This workflow never uploads or publishes releases.
 jobs:
   providers:
     name: Optional providers ${{ matrix.platform }}
