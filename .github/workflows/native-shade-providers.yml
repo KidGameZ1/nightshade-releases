@@ -1,0 +1,94 @@
+name: Shade optional language providers
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Unpublished preparation release containing public-only inputs
+        required: true
+      input_asset:
+        description: Exact public-provider input ZIP filename
+        required: true
+      input_sha256:
+        description: SHA-256 of the public-only input archive
+        required: true
+permissions:
+  contents: read
+jobs:
+  providers:
+    name: Optional providers ${{ matrix.platform }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            platform: macos-arm64
+          - runner: windows-2025
+            platform: windows-x64
+          - runner: ubuntu-24.04
+            platform: linux-x64
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '9.0.202'
+      - name: Install Linux provider compiler tools
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y clang make libreadline-dev patchelf
+      - uses: msys2/setup-msys2@v2
+        if: runner.os == 'Windows'
+        id: msys2
+        with:
+          msystem: MINGW64
+          update: false
+          install: make mingw-w64-x86_64-gcc
+          cache: false
+      - name: Download only approved public provider inputs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NS_REPO: ${{ github.repository }}
+          NS_TAG: ${{ inputs.release_tag }}
+          NS_ASSET: ${{ inputs.input_asset }}
+          NS_SHA256: ${{ inputs.input_sha256 }}
+        shell: python
+        run: |
+          import os, re, subprocess
+          from pathlib import Path
+          name=os.environ['NS_ASSET']
+          assert re.fullmatch(r'Nightshade-Public-Language-Inputs-[A-Za-z0-9.-]+\.zip', name)
+          assert re.fullmatch(r'[0-9a-f]{64}',os.environ['NS_SHA256'])
+          Path('downloads').mkdir()
+          subprocess.run(['gh','release','download',os.environ['NS_TAG'],'--repo',os.environ['NS_REPO'],'--pattern',name,'--dir','downloads'],check=True)
+      - name: Build real language providers and verify source-free relocation
+        env:
+          MSYS2_LOCATION: ${{ steps.msys2.outputs.msys2-location }}
+          NS_ASSET: ${{ inputs.input_asset }}
+          NS_SHA256: ${{ inputs.input_sha256 }}
+          NS_PLATFORM: ${{ matrix.platform }}
+        shell: python
+        run: |
+          import os, subprocess, sys
+          subprocess.run([sys.executable,'scripts/shade-only/providers.py','run','--inputs','downloads/'+os.environ['NS_ASSET'],'--sha256',os.environ['NS_SHA256'],'--platform',os.environ['NS_PLATFORM'],'--output','output/providers'],check=True)
+      - name: Retain provider packages and compact evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: Nightshade-Optional-Languages-${{ matrix.platform }}
+          path: |
+            output/providers/packages/
+            output/providers/*.log
+            output/providers/provider-verification.json
+            output/providers/runtime-evidence/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
