@@ -67,7 +67,7 @@ def stage(args):
 def windows_compilers():
     """Use LLVM's native MSVC target; Lua alone uses the installed MinGW C tools."""
     vswhere=Path(os.environ.get("ProgramFiles(x86)","C:/Program Files (x86)"))/"Microsoft Visual Studio/Installer/vswhere.exe"
-    installation=subprocess.check_output([str(vswhere),"-latest","-version","[17.0,18.0)","-products","*","-requires","Microsoft.VisualStudio.Component.VC.Tools.x86.x64","-property","installationPath"],text=True).strip()
+    installation=subprocess.check_output([str(vswhere),"-latest","-products","*","-requires","Microsoft.VisualStudio.Component.VC.Tools.x86.x64","-property","installationPath"],text=True).strip()
     script=Path(installation)/"Common7/Tools/VsDevCmd.bat"
     schema.require(script.is_file(),"Windows C++ verification requires the Visual Studio x64 SDK")
     with tempfile.TemporaryDirectory(prefix="nightshade-msvc-") as temporary:
@@ -79,8 +79,11 @@ def windows_compilers():
             key,value=line.split("=",1);os.environ[key]=value
     llvm=Path(os.environ.get("ProgramFiles","C:/Program Files"))/"LLVM/bin"
     schema.require((llvm/"clang++.exe").is_file(),"LLVM clang++ is required")
-    msys=Path(os.environ["MSYS2_LOCATION"])
-    os.environ["PATH"]=os.pathsep.join((str(llvm),str(msys/"mingw64/bin"),str(msys/"usr/bin"),os.environ.get("PATH","")))
+    extra=[str(llvm)]
+    if os.environ.get("MSYS2_LOCATION"):
+        msys=Path(os.environ["MSYS2_LOCATION"])
+        extra += [str(msys/"mingw64/bin"),str(msys/"usr/bin")]
+    os.environ["PATH"]=os.pathsep.join([*extra,os.environ.get("PATH","")])
     os.environ["CXX"]=str(llvm/"clang++.exe")
 
 

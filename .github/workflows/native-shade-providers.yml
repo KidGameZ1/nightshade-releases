@@ -44,6 +44,10 @@ jobs:
       - name: Install Linux provider compiler tools
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y clang make libreadline-dev patchelf
+      - name: Install compatible official Windows C++ compiler
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/shade-only/windows-cxx.ps1
       - uses: msys2/setup-msys2@v2
         if: runner.os == 'Windows'
         id: msys2
