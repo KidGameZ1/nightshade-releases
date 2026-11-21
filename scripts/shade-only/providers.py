@@ -67,7 +67,7 @@ def stage(args):
 def windows_compilers():
     """Use LLVM's native MSVC target; Lua alone uses the installed MinGW C tools."""
     vswhere=Path(os.environ.get("ProgramFiles(x86)","C:/Program Files (x86)"))/"Microsoft Visual Studio/Installer/vswhere.exe"
-    installation=subprocess.check_output([str(vswhere),"-latest","-products","*","-requires","Microsoft.VisualStudio.Component.VC.Tools.x86.x64","-property","installationPath"],text=True).strip()
+    installation=subprocess.check_output([str(vswhere),"-latest","-version","[17.0,18.0)","-products","*","-requires","Microsoft.VisualStudio.Component.VC.Tools.x86.x64","-property","installationPath"],text=True).strip()
     script=Path(installation)/"Common7/Tools/VsDevCmd.bat"
     schema.require(script.is_file(),"Windows C++ verification requires the Visual Studio x64 SDK")
     with tempfile.TemporaryDirectory(prefix="nightshade-msvc-") as temporary:
